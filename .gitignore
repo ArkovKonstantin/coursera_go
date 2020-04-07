@@ -1,2 +1,4 @@
 hw1_tree/.idea/
 .idea/
+*.out
+*.test
