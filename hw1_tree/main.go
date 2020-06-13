@@ -7,41 +7,18 @@ import (
 	//"log"
 	"os"
 	"sort"
-	"strings"
 )
 
-func filter(files *[]os.FileInfo) {
-	n := 0
-	for _, v := range *files {
-		if v.IsDir() {
-			(*files)[n] = v
-			n++
-		}
-	}
-	*files = (*files)[:n]
-}
-
-func getPref(path string, lastDirCount int, lastItem bool) string {
-	c := strings.Count(path, "/") - 1
-	var pref string
-	for i := 0; i < c; i++ {
-		if i < c-lastDirCount {
-			pref += "│\t"
-		} else {
-			pref += "\t"
-		}
-	}
-	if lastItem == true {
-		pref += "└───"
-	} else {
-		pref += "├───"
-	}
-	return pref
-}
-
 func dirTree(out io.Writer, path string, printFiles bool) error {
-	lastDirCount := strings.Count(path, "&")
-	path = path[:len(path)-lastDirCount]
+	seq := make([]int, 0)
+	err := printTree(out, path, printFiles, seq)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func printTree(out io.Writer, path string, printFiles bool, seq []int) error {
 	files, err := ioutil.ReadDir(path)
 	if err != nil {
 		return err
@@ -53,40 +30,52 @@ func dirTree(out io.Writer, path string, printFiles bool) error {
 	//sorting
 	sort.Slice(files, func(i, j int) bool { return files[i].Name() < files[j].Name() })
 	for i, file := range files {
-		newP := path + string(os.PathSeparator) + file.Name()
+		prefix := ""
+		for _, j := range seq {
+			if j == 1 {
+				prefix += "\t"
+			} else if j == 0 {
+				prefix += "|\t"
+			}
+		}
+		if i == len(files)-1 {
+			prefix += "└───"
+		} else {
+			prefix += "├───"
+		}
 		if file.IsDir() {
-			var lastItem bool
+			fmt.Fprintf(out, "%s\n", prefix+file.Name())
 			if i == len(files)-1 {
-				lastItem = true
-				newP += "&" // add suffix indicating last dir
-			}
-			//fmt.Printf("%s\n", getPref(newP, lastDirCount, lastItem) + file.Name())
-			fmt.Fprintf(out, "%s\n", getPref(newP, lastDirCount, lastItem)+file.Name())
-			for j := 0; j < lastDirCount; j++ { // recover suffixes
-				newP += "&"
-			}
-			err = dirTree(out, newP, printFiles)
-			if err != nil {
-				return err
+				err := printTree(out, path+string(os.PathSeparator)+file.Name(), printFiles, append(seq, 1))
+				if err != nil {
+					return nil
+				}
+			} else {
+				err := printTree(out, path+string(os.PathSeparator)+file.Name(), printFiles, append(seq, 0))
+				if err != nil {
+					return nil
+				}
 			}
 		} else {
-			if printFiles {
-				var lastItem bool
-				if i == len(files)-1 {
-					lastItem = true
-				}
-
-				if file.Size() == 0 {
-					//fmt.Printf("%s (%s)\n", getPref(newP,lastDirCount, lastItem) + file.Name(), "empty")
-					fmt.Fprintf(out, "%s (%s)\n", getPref(newP, lastDirCount, lastItem)+file.Name(), "empty")
-				} else {
-					//fmt.Printf("%s (%db)\n", getPref(newP,lastDirCount, lastItem) + file.Name(), file.Size())
-					fmt.Fprintf(out, "%s (%db)\n", getPref(newP, lastDirCount, lastItem)+file.Name(), file.Size())
-				}
+			if file.Size() == 0 {
+				fmt.Fprintf(out, "%s (%s)\n", prefix+file.Name(), "empty")
+			} else {
+				fmt.Fprintf(out, "%s (%db)\n", prefix+file.Name(), file.Size())
 			}
 		}
 	}
 	return nil
+}
+
+func filter(files *[]os.FileInfo) {
+	n := 0
+	for _, v := range *files {
+		if v.IsDir() {
+			(*files)[n] = v
+			n++
+		}
+	}
+	*files = (*files)[:n]
 }
 
 func main() {
